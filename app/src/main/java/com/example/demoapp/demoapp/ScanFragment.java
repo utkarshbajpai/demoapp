@@ -1,10 +1,10 @@
 package com.example.demoapp.demoapp;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.CountDownTimer;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 import android.util.Log;
@@ -24,6 +24,7 @@ public class ScanFragment extends Fragment {
     // TODO: Rename and change types of parameters
     private TextView scanResult;
     private Button okButton;
+    private CountDownTimer timer;
 
     public ScanFragment() {
     }
@@ -57,6 +58,7 @@ public class ScanFragment extends Fragment {
         okButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                timer.cancel();
                 IntentIntegrator.forSupportFragment(ScanFragment.this).initiateScan();
             }
         });
@@ -72,7 +74,6 @@ public class ScanFragment extends Fragment {
     }
 
     public interface OnFragmentInteractionListener {
-        // TODO: Update argument type and name
         void onFragmentInteraction(Uri uri);
     }
 
@@ -82,14 +83,32 @@ public class ScanFragment extends Fragment {
         if(result != null) {
             if(result.getContents() == null) {
                 Log.d("MainActivity", "Cancelled scan");
-
             } else {
                 Log.d("MainActivity", "Scanned" + result.getContents());
                 scanResult.setText(result.getContents());
+                // add code here
+                //getTimeLeftInmillis(result.getContents())
+                timer = new CountDownTimer(50000, 1000) {
+                    int counter = 1;
+
+                    @Override
+                    public void onTick(long millisUntilFinished) {
+                        scanResult.setText("Time Left: "+ String.valueOf(millisUntilFinished/1000));
+                        counter++;
+                    }
+
+                    @Override
+                    public void onFinish() {
+                        scanResult.setText("EXPIRED");
+                    }
+                }.start();
             }
         } else {
-            // This is important, otherwise the result will not be passed to the fragment
             super.onActivityResult(requestCode, resultCode, data);
         }
+    }
+
+    int getTimeLeft(String id){
+        return 0;
     }
 }
