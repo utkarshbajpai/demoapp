@@ -18,8 +18,6 @@ import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
 
 public class ScanFragment extends Fragment {
-    // TODO: Rename parameter arguments, choose names that match
-    // the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
 
     public static final String FRAGMENT_TAG = "ScanFragment";
 
@@ -53,19 +51,13 @@ public class ScanFragment extends Fragment {
 
     @Override
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
-        scanResult = (TextView) getView().findViewById(R.id.scan_result);
+        scanResult = (TextView) getView().findViewById(R.id.scan_result_textView);
         okButton = (Button)getView().findViewById(R.id.ok_button);
+        IntentIntegrator.forSupportFragment(ScanFragment.this).initiateScan();
         okButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Activity parent = (Activity) getContext();
-                IntentIntegrator integrator = new IntentIntegrator(parent);
-                integrator.setDesiredBarcodeFormats(IntentIntegrator.ALL_CODE_TYPES);
-                integrator.setPrompt("Scan");
-                integrator.setCameraId(0);
-                integrator.setBeepEnabled(false);
-                integrator.setBarcodeImageEnabled(false);
-                integrator.initiateScan();
+                IntentIntegrator.forSupportFragment(ScanFragment.this).initiateScan();
             }
         });
     }
