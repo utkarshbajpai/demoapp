@@ -23,12 +23,21 @@ import com.amazonaws.regions.Regions;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.TimeZone;
+
 public class ScanFragment extends Fragment {
 
     public static final String FRAGMENT_TAG = "ScanFragment";
 
     // TODO: Rename and change types of parameters
-    private TextView scanResult;
+    private TextView serialNumber;
+    private TextView dateOpened;
+    private TextView timeOpened;
+    private TextView timeLeft;
+
     private Button okButton;
     private CountDownTimer timer;
     private Context context;
@@ -57,7 +66,11 @@ public class ScanFragment extends Fragment {
 
     @Override
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
-        scanResult = (TextView) getView().findViewById(R.id.scan_result_textView);
+        serialNumber = (TextView) getView().findViewById(R.id.serial_number_textView);
+        dateOpened = (TextView) getView().findViewById(R.id.date_opened_textView);
+        timeOpened = (TextView) getView().findViewById(R.id.time_opened_textView);
+        timeLeft = (TextView) getView().findViewById(R.id.time_left_textView);
+
         okButton = (Button)getView().findViewById(R.id.ok_button);
         IntentIntegrator.forSupportFragment(ScanFragment.this).initiateScan();
         okButton.setOnClickListener(new View.OnClickListener() {
@@ -90,32 +103,68 @@ public class ScanFragment extends Fragment {
                 Log.d("MainActivity", "Cancelled scan");
             } else {
                 Log.d("MainActivity", "Scanned" + result.getContents());
-                String item_id = result.getContents();
-                int timeLeft = getTimeLeft(item_id);
+                String itemId = result.getContents();
 
-                timer = new CountDownTimer(timeLeft, 1000) {
-                    int counter = 1;
+                ScanInfo scanInfo = getScanInfo(itemId);
 
-                    @Override
-                    public void onTick(long millisUntilFinished) {
-                        scanResult.setText("Time Left: "+ String.valueOf(millisUntilFinished/1000));
-                        counter++;
-                    }
+                if(scanInfo == null){
+                    // Mark bottle as opened and publish current time and days till expiry to DynamoDB
+                    long currentTimeSeconds = System.currentTimeMillis() / 1000;
+                    // FIXME: Replaced with actual time left from QR scan
+                    scanInfo = new ScanInfo(currentTimeSeconds, 3 * 24 * 3600);
+                }
 
-                    @Override
-                    public void onFinish() {
-                        scanResult.setText("EXPIRED");
-                    }
-                }.start();
+                serialNumber.setText("Serial Number: " + itemId);
+
+                // Create date and hour for time opened
+                Date openDate = new Date(scanInfo.startTimestamp * 1000L);
+                SimpleDateFormat jdfDay = new SimpleDateFormat("dd/MM/yyyy");
+                SimpleDateFormat jdfTime = new SimpleDateFormat("HH:mm:ss");
+                jdfDay.setTimeZone(TimeZone.getTimeZone("GMT+8"));
+                jdfTime.setTimeZone(TimeZone.getTimeZone("GMT+8"));
+                String openDay = jdfDay.format(openDate);
+                String openTime = jdfDay.format(openDate);
+
+                dateOpened.setText("Opened On: " + openDay);
+                timeOpened.setText("Time Opened: " + openTime);
+
+                // Display countdown
+                if(scanInfo.timeLeft < 0) {
+                    timeLeft.setText("Time Left: EXPIRED");
+                } else {
+                    timer = new CountDownTimer(scanInfo.timeLeft * 1000, 1000) {
+                        int counter = 1;
+
+                        @Override
+                        public void onTick(long millisUntilFinished) {
+                            timeLeft.setText("Time Left: " + String.valueOf(millisUntilFinished / 1000));
+                            counter++;
+                        }
+
+                        @Override
+                        public void onFinish() {
+                            timeLeft.setText("Time Left: EXPIRED");
+                        }
+
+                    }.start();
+                }
             }
         } else {
             super.onActivityResult(requestCode, resultCode, data);
         }
     }
 
-    int getTimeLeft(String id){
+    ScanInfo getScanInfo(String id){
         Document document = dbTable.getItem(new Primitive(id));
         int result = document.get("start_time").asInt();
-        return result;
+
+        // If not present, return null
+
+        // Get expiryTimeDays and startTimestamp from DynamoDB
+        long currentTimeSeconds = System.currentTimeMillis() / 1000;
+        long expiryTimeSeconds = expiryTimeDays * 24 * 3600;
+        long timeLeft = startTimestamp + expiryTimeSeconds - currentTimeSeconds;
+
+        return new ScanInfo(startTimestamp, timeLeft);
     }
 }
