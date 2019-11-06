@@ -3,6 +3,7 @@ package com.example.demoapp.demoapp;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.support.annotation.Nullable;
@@ -26,13 +27,16 @@ import com.google.zxing.integration.android.IntentResult;
 public class ScanFragment extends Fragment {
 
     public static final String FRAGMENT_TAG = "ScanFragment";
+    String TABLE_NAME = "qr_code_app";
+    CognitoCachingCredentialsProvider credentialsProvider;
+    AmazonDynamoDBClient dbClient;
+    Table dbTable;
 
     // TODO: Rename and change types of parameters
     private TextView scanResult;
     private Button okButton;
     private CountDownTimer timer;
     private Context context;
-    Table dbTable;
 
     public ScanFragment() {
     }
@@ -91,9 +95,9 @@ public class ScanFragment extends Fragment {
             } else {
                 Log.d("MainActivity", "Scanned" + result.getContents());
                 String item_id = result.getContents();
-                int timeLeft = getTimeLeft(item_id);
+                getTimeLeft(item_id);
 
-                timer = new CountDownTimer(timeLeft, 1000) {
+                timer = new CountDownTimer(50000, 1000) {
                     int counter = 1;
 
                     @Override
@@ -113,9 +117,33 @@ public class ScanFragment extends Fragment {
         }
     }
 
-    int getTimeLeft(String id){
-        Document document = dbTable.getItem(new Primitive(id));
-        int result = document.get("start_time").asInt();
-        return result;
+    void getTimeLeft(String id){
+        new AsyncTask<String, Void, String>() {
+            @Override
+            protected String doInBackground(String... strings) {
+                String id = strings[0];
+                credentialsProvider = new CognitoCachingCredentialsProvider(
+                        getActivity(),
+                        "ap-southeast-1:91f6eaad-2386-4374-ba88-e23bf7fac3fe", // Identity pool ID
+                        Regions.AP_SOUTHEAST_1 // Region
+                );
+                dbClient = new AmazonDynamoDBClient(credentialsProvider);
+                dbTable = Table.loadTable(dbClient, TABLE_NAME);
+                Log.d("ScanFragment", "Getting item from Table");
+                Document document = dbTable.getItem(new Primitive(id));
+                String result = document.get("start_time").asString();
+                Log.d("ScanFragment", "Retrieved Item " +  result);
+                Log.d("Result", result);
+                return result;
+            }
+
+            @Override
+            protected void onPostExecute(String s) {
+                scanResult.setText(s);
+                super.onPostExecute(s);
+            }
+        }.execute(id);
+
+
     }
 }

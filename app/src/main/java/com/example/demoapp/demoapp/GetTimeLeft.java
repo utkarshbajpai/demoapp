@@ -8,7 +8,7 @@ import com.amazonaws.mobileconnectors.dynamodbv2.document.Table;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
 
-public class AWSDynamoClientConnection  extends AsyncTask<Context, Void, Table>{
+public class GetTimeLeft extends AsyncTask<Context, Void, Table>{
     String TABLE_NAME = "qr_code_app";
     CognitoCachingCredentialsProvider credentialsProvider;
     AmazonDynamoDBClient dbClient;
