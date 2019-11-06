@@ -24,6 +24,11 @@ import com.amazonaws.regions.Regions;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.TimeZone;
+
 public class ScanFragment extends Fragment {
 
     public static final String FRAGMENT_TAG = "ScanFragment";
@@ -33,7 +38,11 @@ public class ScanFragment extends Fragment {
     Table dbTable;
 
     // TODO: Rename and change types of parameters
-    private TextView scanResult;
+    private TextView serialNumber;
+    private TextView dateOpened;
+    private TextView timeOpened;
+    private TextView timeLeft;
+
     private Button okButton;
     private CountDownTimer timer;
     private Context context;
@@ -61,8 +70,12 @@ public class ScanFragment extends Fragment {
 
     @Override
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
-        scanResult = (TextView) getView().findViewById(R.id.scan_result_textView);
-        okButton = (Button)getView().findViewById(R.id.ok_button);
+        serialNumber = (TextView) getView().findViewById(R.id.serial_number_textView);
+        dateOpened = (TextView) getView().findViewById(R.id.date_opened_textView);
+        timeOpened = (TextView) getView().findViewById(R.id.time_opened_textView);
+        timeLeft = (TextView) getView().findViewById(R.id.time_left_textView);
+
+        okButton = (Button) getView().findViewById(R.id.ok_button);
         IntentIntegrator.forSupportFragment(ScanFragment.this).initiateScan();
         okButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -72,6 +85,7 @@ public class ScanFragment extends Fragment {
             }
         });
     }
+
     @Override
     public void onAttach(Context context) {
         super.onAttach(context);
@@ -89,38 +103,25 @@ public class ScanFragment extends Fragment {
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         IntentResult result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
-        if(result != null) {
-            if(result.getContents() == null) {
+        if (result != null) {
+            if (result.getContents() == null) {
                 Log.d("MainActivity", "Cancelled scan");
             } else {
                 Log.d("MainActivity", "Scanned" + result.getContents());
-                String item_id = result.getContents();
-                getTimeLeft(item_id);
 
-                timer = new CountDownTimer(50000, 1000) {
-                    int counter = 1;
+                String itemId = result.getContents();
 
-                    @Override
-                    public void onTick(long millisUntilFinished) {
-                        scanResult.setText("Time Left: "+ String.valueOf(millisUntilFinished/1000));
-                        counter++;
-                    }
 
-                    @Override
-                    public void onFinish() {
-                        scanResult.setText("EXPIRED");
-                    }
-                }.start();
             }
         } else {
             super.onActivityResult(requestCode, resultCode, data);
         }
     }
 
-    void getTimeLeft(String id){
-        new AsyncTask<String, Void, String>() {
+    void getDocument(String id) {
+        new AsyncTask<String, Void, Document>() {
             @Override
-            protected String doInBackground(String... strings) {
+            protected Document doInBackground(String... strings) {
                 String id = strings[0];
                 credentialsProvider = new CognitoCachingCredentialsProvider(
                         getActivity(),
@@ -131,19 +132,67 @@ public class ScanFragment extends Fragment {
                 dbTable = Table.loadTable(dbClient, TABLE_NAME);
                 Log.d("ScanFragment", "Getting item from Table");
                 Document document = dbTable.getItem(new Primitive(id));
-                String result = document.get("start_time").asString();
-                Log.d("ScanFragment", "Retrieved Item " +  result);
-                Log.d("Result", result);
-                return result;
+                return document;
             }
 
             @Override
-            protected void onPostExecute(String s) {
-                scanResult.setText(s);
+            protected void onPostExecute(Document s) {
+                processScanInfo(s);
                 super.onPostExecute(s);
             }
         }.execute(id);
-
-
     }
-}
+
+        void processScanInfo(Document document){
+            // If not present, return null
+            int expiryTimeDays = 0;
+            long startTimestamp = 0;
+            // Get expiryTimeDays and startTimestamp from DynamoDB
+            long currentTimeSeconds = System.currentTimeMillis() / 1000;
+            long expiryTimeSeconds = expiryTimeDays * 24 * 3600;
+            long timeLeft1 = startTimestamp + expiryTimeSeconds - currentTimeSeconds;
+            ScanInfo scanInfo =  new ScanInfo(startTimestamp, timeLeft1);
+
+            if (scanInfo == null) {
+                // Mark bottle as opened and publish current time and days till expiry to DynamoDB
+                currentTimeSeconds = System.currentTimeMillis() / 1000;
+                // FIXME: Replaced with actual time left from QR scan
+                scanInfo = new ScanInfo(currentTimeSeconds, 3 * 24 * 3600);
+            }
+
+            serialNumber.setText("Serial Number: ");
+
+            // Create date and hour for time opened
+            Date openDate = new Date(scanInfo.startTimestamp * 1000L);
+            SimpleDateFormat jdfDay = new SimpleDateFormat("dd/MM/yyyy");
+            SimpleDateFormat jdfTime = new SimpleDateFormat("HH:mm:ss");
+            jdfDay.setTimeZone(TimeZone.getTimeZone("GMT+8"));
+            jdfTime.setTimeZone(TimeZone.getTimeZone("GMT+8"));
+            String openDay = jdfDay.format(openDate);
+            String openTime = jdfDay.format(openDate);
+
+            dateOpened.setText("Opened On: " + openDay);
+            timeOpened.setText("Time Opened: " + openTime);
+
+            // Display countdown
+            if (scanInfo.timeLeft < 0) {
+                timeLeft.setText("Time Left: EXPIRED");
+            } else {
+                timer = new CountDownTimer(scanInfo.timeLeft * 1000, 1000) {
+                    int counter = 1;
+
+                    @Override
+                    public void onTick(long millisUntilFinished) {
+                        timeLeft.setText("Time Left: " + String.valueOf(millisUntilFinished / 1000));
+                        counter++;
+                    }
+
+                    @Override
+                    public void onFinish() {
+                        timeLeft.setText("Time Left: EXPIRED");
+                    }
+
+                }.start();
+            }
+        }
+    }
