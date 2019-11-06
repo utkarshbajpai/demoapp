@@ -19,6 +19,7 @@ import com.amazonaws.auth.CognitoCachingCredentialsProvider;
 import com.amazonaws.mobileconnectors.dynamodbv2.document.Table;
 import com.amazonaws.mobileconnectors.dynamodbv2.document.datatype.Document;
 import com.amazonaws.mobileconnectors.dynamodbv2.document.datatype.Primitive;
+import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
 
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
@@ -110,7 +111,7 @@ public class ScanFragment extends Fragment {
                 Log.d("MainActivity", "Scanned" + result.getContents());
 
                 String itemId = result.getContents();
-
+                getDocument(itemId);
 
             }
         } else {
@@ -129,6 +130,7 @@ public class ScanFragment extends Fragment {
                         Regions.AP_SOUTHEAST_1 // Region
                 );
                 dbClient = new AmazonDynamoDBClient(credentialsProvider);
+                dbClient.setRegion(Region.getRegion(Regions.AP_SOUTHEAST_1));
                 dbTable = Table.loadTable(dbClient, TABLE_NAME);
                 Log.d("ScanFragment", "Getting item from Table");
                 Document document = dbTable.getItem(new Primitive(id));
