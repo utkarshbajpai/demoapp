@@ -14,9 +14,15 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
 
+import com.amazonaws.auth.CognitoCachingCredentialsProvider;
+import com.amazonaws.mobileconnectors.dynamodbv2.document.Table;
+import com.amazonaws.mobileconnectors.dynamodbv2.document.datatype.Document;
+import com.amazonaws.mobileconnectors.dynamodbv2.document.datatype.Primitive;
+import com.amazonaws.regions.Regions;
+
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
-
 public class ScanFragment extends Fragment {
 
     public static final String FRAGMENT_TAG = "ScanFragment";
@@ -25,11 +31,12 @@ public class ScanFragment extends Fragment {
     private TextView scanResult;
     private Button okButton;
     private CountDownTimer timer;
+    private Context context;
+    Table dbTable;
 
     public ScanFragment() {
     }
 
-    private Context context;
     public static ScanFragment newInstance() {
         ScanFragment fragment = new ScanFragment();
         Bundle args = new Bundle();
@@ -40,13 +47,11 @@ public class ScanFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
         return inflater.inflate(R.layout.fragment_scan, container, false);
     }
 
@@ -85,10 +90,10 @@ public class ScanFragment extends Fragment {
                 Log.d("MainActivity", "Cancelled scan");
             } else {
                 Log.d("MainActivity", "Scanned" + result.getContents());
-                scanResult.setText(result.getContents());
-                // add code here
-                //getTimeLeftInmillis(result.getContents())
-                timer = new CountDownTimer(50000, 1000) {
+                String item_id = result.getContents();
+                int timeLeft = getTimeLeft(item_id);
+
+                timer = new CountDownTimer(timeLeft, 1000) {
                     int counter = 1;
 
                     @Override
@@ -109,6 +114,8 @@ public class ScanFragment extends Fragment {
     }
 
     int getTimeLeft(String id){
-        return 0;
+        Document document = dbTable.getItem(new Primitive(id));
+        int result = document.get("start_time").asInt();
+        return result;
     }
 }

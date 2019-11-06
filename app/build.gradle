@@ -28,4 +28,7 @@ dependencies {
     androidTestImplementation 'com.android.support.test:runner:1.0.2'
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
     implementation 'com.journeyapps:zxing-android-embedded:3.6.0'
+    implementation 'com.amazonaws:aws-android-sdk-core:2.12.5'
+    implementation 'com.amazonaws:aws-android-sdk-ddb:2.12.5'
+    implementation 'com.amazonaws:aws-android-sdk-ddb-document:2.12.5'
 }
