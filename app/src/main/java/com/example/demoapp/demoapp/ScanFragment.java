@@ -29,6 +29,7 @@ import com.google.zxing.integration.android.IntentResult;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
 
 public class ScanFragment extends Fragment {
 
@@ -111,6 +112,7 @@ public class ScanFragment extends Fragment {
                 Log.d("MainActivity", "Scanned" + result.getContents());
 
                 String itemId = result.getContents();
+                serialNumber.setText("Serial Number: " + itemId);
                 getDocument(itemId);
 
             }
@@ -124,16 +126,18 @@ public class ScanFragment extends Fragment {
             @Override
             protected Document doInBackground(String... strings) {
                 String id = strings[0];
-                credentialsProvider = new CognitoCachingCredentialsProvider(
-                        getActivity(),
-                        "ap-southeast-1:91f6eaad-2386-4374-ba88-e23bf7fac3fe", // Identity pool ID
-                        Regions.AP_SOUTHEAST_1 // Region
-                );
-                dbClient = new AmazonDynamoDBClient(credentialsProvider);
-                dbClient.setRegion(Region.getRegion(Regions.AP_SOUTHEAST_1));
-                dbTable = Table.loadTable(dbClient, TABLE_NAME);
+//                credentialsProvider = new CognitoCachingCredentialsProvider(
+//                        getActivity(),
+//                        "ap-southeast-1:91f6eaad-2386-4374-ba88-e23bf7fac3fe", // Identity pool ID
+//                        Regions.AP_SOUTHEAST_1 // Region
+//                );
+//                dbClient = new AmazonDynamoDBClient(credentialsProvider);
+//                dbClient.setRegion(Region.getRegion(Regions.AP_SOUTHEAST_1));
+//                dbTable = Table.loadTable(dbClient, TABLE_NAME);
+                DatabaseAccess databaseAccess = DatabaseAccess.getInstance(getActivity());
                 Log.d("ScanFragment", "Getting item from Table");
-                Document document = dbTable.getItem(new Primitive(id));
+                Document document = databaseAccess.getItem(id);
+//                Log.d("ScanFragment", document.asString());
                 return document;
             }
 
@@ -145,56 +149,84 @@ public class ScanFragment extends Fragment {
         }.execute(id);
     }
 
-        void processScanInfo(Document document){
-            // If not present, return null
-            int expiryTimeDays = 0;
-            long startTimestamp = 0;
-            // Get expiryTimeDays and startTimestamp from DynamoDB
-            long currentTimeSeconds = System.currentTimeMillis() / 1000;
-            long expiryTimeSeconds = expiryTimeDays * 24 * 3600;
-            long timeLeft1 = startTimestamp + expiryTimeSeconds - currentTimeSeconds;
-            ScanInfo scanInfo =  new ScanInfo(startTimestamp, timeLeft1);
+    void processScanInfo(Document document){
+        if(document == null) {
+//            addToDatabase()
+        }
+        // If not present, return null
+        int expiryTimeDays = document.get("expiry_time_days").asInt();
+        long startTimestamp = document.get("start_timestamp").asLong();
 
-            if (scanInfo == null) {
-                // Mark bottle as opened and publish current time and days till expiry to DynamoDB
-                currentTimeSeconds = System.currentTimeMillis() / 1000;
-                // FIXME: Replaced with actual time left from QR scan
-                scanInfo = new ScanInfo(currentTimeSeconds, 3 * 24 * 3600);
-            }
+        // Get expiryTimeDays and startTimestamp from DynamoDB
+        long currentTimeSeconds = System.currentTimeMillis() / 1000;
+        long expiryTimeSeconds = expiryTimeDays * 24 * 3600;
+        long timeLeft1 = startTimestamp + expiryTimeSeconds - currentTimeSeconds;
+        ScanInfo scanInfo =  new ScanInfo(startTimestamp, timeLeft1);
 
-            serialNumber.setText("Serial Number: ");
+        if (scanInfo == null) {
+            // Mark bottle as opened and publish current time and days till expiry to DynamoDB
+            currentTimeSeconds = System.currentTimeMillis() / 1000;
+            // FIXME: Replaced with actual time left from QR scan
+            scanInfo = new ScanInfo(currentTimeSeconds, 3 * 24 * 3600);
+        }
 
-            // Create date and hour for time opened
-            Date openDate = new Date(scanInfo.startTimestamp * 1000L);
-            SimpleDateFormat jdfDay = new SimpleDateFormat("dd/MM/yyyy");
-            SimpleDateFormat jdfTime = new SimpleDateFormat("HH:mm:ss");
-            jdfDay.setTimeZone(TimeZone.getTimeZone("GMT+8"));
-            jdfTime.setTimeZone(TimeZone.getTimeZone("GMT+8"));
-            String openDay = jdfDay.format(openDate);
-            String openTime = jdfDay.format(openDate);
+        // Create date and hour for time opened
+        Date openDate = new Date(scanInfo.startTimestamp * 1000L);
+        SimpleDateFormat jdfDay = new SimpleDateFormat("dd/MM/yyyy");
+        SimpleDateFormat jdfTime = new SimpleDateFormat("HH:mm:ss");
+        jdfDay.setTimeZone(TimeZone.getTimeZone("GMT+8"));
+        jdfTime.setTimeZone(TimeZone.getTimeZone("GMT+8"));
+        String openDay = jdfDay.format(openDate);
+        String openTime = jdfTime.format(openDate);
 
-            dateOpened.setText("Opened On: " + openDay);
-            timeOpened.setText("Time Opened: " + openTime);
+        dateOpened.setText("Opened On: " + openDay);
+        timeOpened.setText("Time Opened: " + openTime);
 
-            // Display countdown
-            if (scanInfo.timeLeft < 0) {
-                timeLeft.setText("Time Left: EXPIRED");
-            } else {
-                timer = new CountDownTimer(scanInfo.timeLeft * 1000, 1000) {
-                    int counter = 1;
+        // Display countdown
+        if (scanInfo.timeLeft < 0) {
+            timeLeft.setText("Time Left: EXPIRED");
+        } else {
+            timer = new CountDownTimer(scanInfo.timeLeft * 1000, 1000) {
+                int counter = 1;
 
-                    @Override
-                    public void onTick(long millisUntilFinished) {
-                        timeLeft.setText("Time Left: " + String.valueOf(millisUntilFinished / 1000));
-                        counter++;
-                    }
+                @Override
+                public void onTick(long millisUntilFinished) {
+                    timeLeft.setText("Time Left: " + convertMillisToCountdown(millisUntilFinished));
+                    counter++;
+                }
 
-                    @Override
-                    public void onFinish() {
-                        timeLeft.setText("Time Left: EXPIRED");
-                    }
+                @Override
+                public void onFinish() {
+                    timeLeft.setText("Time Left: EXPIRED");
+                }
 
-                }.start();
-            }
+            }.start();
         }
     }
+
+    String convertMillisToCountdown(long ms) {
+        final int SECOND = 1000;
+        final int MINUTE = 60 * SECOND;
+        final int HOUR = 60 * MINUTE;
+        final int DAY = 24 * HOUR;
+
+        StringBuffer text = new StringBuffer("");
+        if (ms > DAY) {
+            text.append(ms / DAY).append(" days ");
+            ms %= DAY;
+        }
+        if (ms > HOUR) {
+            text.append(ms / HOUR).append(" hrs ");
+            ms %= HOUR;
+        }
+        if (ms > MINUTE) {
+            text.append(ms / MINUTE).append(" mins ");
+            ms %= MINUTE;
+        }
+        if (ms > SECOND) {
+            text.append(ms / SECOND).append(" s");
+            ms %= SECOND;
+        }
+        return text.toString();
+    }
+}
